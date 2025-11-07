@@ -25,7 +25,7 @@
 #pragma config SOSCSRC = DIG 
 
 //QRD Threshold
-#define QT 2000 
+#define QT 1000 
 
 void config_ad(void);
 void line_following(void);
@@ -85,12 +85,11 @@ void line_following(void){
     state = FORWARD;
  while (1){ 
    if (state == FORWARD) {
-            OC1RS = 78;  // Right motor normal speed
+            OC1RS = 78;  // Right moto normal speed
             OC1R = 39;
-            OC2RS = 78;  // Left motor normal speed
+            OC2RS = 78;  // Left moto normal speed
             OC2R = 39;
             
-            // Check for state transitions
             if (LS <= QT && MS > QT){
                 // Left sensor sees line, middle doesn't - veer right
                 state = RIGHT;
@@ -106,12 +105,11 @@ void line_following(void){
             }
             
    else if (state == LEFT) {
-            OC1RS = 78;  // Right motor normal
+            OC1RS = 78;  // Right moto normal
             OC1R = 39;
-            OC2RS = 39;  // Left motor slow
+            OC2RS = 39;  // Left moto slow
             OC2R = 5;
-            
-            // Check for state transitions
+
             if (MS <= QT && LS > QT){
                 // Back on center line
                 state = FORWARD;
@@ -127,31 +125,29 @@ void line_following(void){
         }
             
         if (state == RIGHT) {
-            OC1RS = 39;  // Right motor slow
+            OC1RS = 39;  // Right moto slow
             OC1R = 20;
-            OC2RS = 78;  // Left motor normal
+            OC2RS = 78;  // Left moto normal
             OC2R = 5;
-            
-            // Check for state transitions
+
             if (MS <= QT && RS > QT){
                 // Back on center line
                 state = FORWARD;
             }
             else if (LS <= QT){
-                // Overshot to the left
+                // Overshot to da left
                 state = LEFT;
             }
             else if (LS > QT && MS > QT && RS > QT){
-                // Lost the line
+                // Lost da line
                 state = SEARCH;
             }
 }  
    if (state == SEARCH){
             // No line detected - stop or search
-            OC1R = 0;  // Stop right motor
-            OC2R = 0;  // Stop left motor
+            OC1R = 0; //set to stop as a test
+            OC2R = 0;  
             
-            // Check if we found the line again
             if (MS <= QT){
                 state = FORWARD;
             }
