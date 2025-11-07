@@ -1,0 +1,214 @@
+/*
+ * File:   newmainXC16.c
+ * Author: cevrn
+ *
+ * Created on November 6, 2025, 5:57 PM
+ */
+
+/*
+ * File:   MT_Rover_Code_2.c
+ * Author: cmiles10
+ *
+ * Created on November 6, 2025, 3:38 PM
+ */
+
+
+#include "xc.h"
+
+// select oscillator
+#pragma config FNOSC = LPRC // 31 khz
+
+// turn of pin 8 clock
+#pragma config OSCIOFNC = OFF
+
+// turn of secondary oscillator
+#pragma config SOSCSRC = DIG 
+
+//QRD Threshold
+#define QT 2000 
+
+void config_ad(void);
+void line_following(void);
+
+int main(void){
+    
+    // states
+    enum { linefollowing } state;
+    
+    // configure peripherals
+    config_ad();
+    _ANSA0 = 0;
+    _ANSA1 = 0;
+    _ANSA2 = 1;     // Middle
+    _ANSB2 = 1;     //Right
+    _ANSB4 = 1;     //Left
+    
+    // configure output or input
+    _TRISA0 = 0; // Right moto dir
+    _TRISA1 = 0; // Left moto dir
+    _TRISA2 = 1; // Middle QRD
+    _TRISB2 = 1; // Right QRD 
+    _TRISB4 = 1; // Left QRD 
+    
+    // set initial state of output pins
+    _LATA0 = 0;
+    _LATA1 = 0;
+    
+    // configure PWM
+    OC1CON1 = 0x1C06;
+    OC1CON2 = 0x001F;
+    OC2CON1 = 0x1C06;
+    OC2CON2 = 0x001F;
+    OC1RS = 78;        // PWM period
+    OC1R = 39; 
+    OC2RS = 78;        // PWM period
+    OC2R = 39;         // 50% duty cycle
+    
+    // while loop
+    while(1){
+        
+        // initialize line following state
+        line_following();
+        
+    }
+    
+return 0;
+
+}
+
+void line_following(void){
+    unsigned int LS = ADC1BUF15;  
+    unsigned int MS = ADC1BUF13;  
+    unsigned int RS = ADC1BUF4;
+    
+    enum {FORWARD, LEFT, RIGHT, SEARCH} state;
+    state = FORWARD;
+ while (1){ 
+   if (state == FORWARD) {
+            OC1RS = 78;  // Right motor normal speed
+            OC1R = 39;
+            OC2RS = 78;  // Left motor normal speed
+            OC2R = 39;
+            
+            // Check for state transitions
+            if (LS <= QT && MS > QT){
+                // Left sensor sees line, middle doesn't - veer right
+                state = RIGHT;
+            }
+            else if (RS <= QT && MS > QT){
+                // Right sensor sees line, middle doesn't - veer left
+                state = LEFT;
+            }
+            else if (LS > QT && MS > QT && RS > QT){
+                // No sensors see line - lost the line
+                state = SEARCH;
+            }
+            }
+            
+   else if (state == LEFT) {
+            OC1RS = 78;  // Right motor normal
+            OC1R = 39;
+            OC2RS = 39;  // Left motor slow
+            OC2R = 5;
+            
+            // Check for state transitions
+            if (MS <= QT && LS > QT){
+                // Back on center line
+                state = FORWARD;
+            }
+            else if (RS <= QT){
+                // Overshot to the right
+                state = RIGHT;
+            }
+            else if (LS > QT && MS > QT && RS > QT){
+                // Lost the line
+                state = SEARCH;
+            }
+        }
+            
+        if (state == RIGHT) {
+            OC1RS = 39;  // Right motor slow
+            OC1R = 20;
+            OC2RS = 78;  // Left motor normal
+            OC2R = 5;
+            
+            // Check for state transitions
+            if (MS <= QT && RS > QT){
+                // Back on center line
+                state = FORWARD;
+            }
+            else if (LS <= QT){
+                // Overshot to the left
+                state = LEFT;
+            }
+            else if (LS > QT && MS > QT && RS > QT){
+                // Lost the line
+                state = SEARCH;
+            }
+}  
+   if (state == SEARCH){
+            // No line detected - stop or search
+            OC1R = 0;  // Stop right motor
+            OC2R = 0;  // Stop left motor
+            
+            // Check if we found the line again
+            if (MS <= QT){
+                state = FORWARD;
+            }
+            else if (LS <= QT){
+                state = RIGHT;
+            }
+            else if (RS <= QT){
+                state = LEFT;
+            }
+    }
+ }}
+
+void config_ad(void){
+    
+    _ADON = 0;          // AD1CON1<15> -- Turn off A/D during config
+    
+    // Clear all A/D registers
+    AD1CON1 = 0; 
+    AD1CON2 = 0; 
+    AD1CON3 = 0; 
+    AD1CON5 = 0; 
+    AD1CSSL = 0; 
+    AD1CSSH = 0; 
+    
+    // AD1CON1 register
+    _ADSIDL = 0;    // AD1CON1<13> -- A/D continues while in idle mode
+    _MODE12 = 1;    // AD1CON1<10> -- 12-bit A/D operation
+    _FORM = 0;      // AD1CON1<9:8> -- Unsigned integer output
+    _SSRC = 7;      // AD1CON1<7:4> -- Auto conversion (internal counter)
+    _ASAM = 1;      // AD1CON1<2> -- Auto sampling
+
+    // AD1CON2 register
+    _PVCFG = 0;     // AD1CON2<15:14> -- Use VDD as positive ref voltage
+    _NVCFG = 0;     // AD1CON2<13> -- Use VSS as negative ref voltage
+    _BUFREGEN = 1;  // AD1CON2<11> -- Result appears in buffer
+                    // location corresponding to channel, e.g., AN12
+                    // results appear in ADC1BUF12
+    _CSCNA = 1;     // AD1CON2<10> -- Scans inputs specified in AD1CSSx
+                    // registers
+    _SMPI = 2;    // AD1CON2<6:2> -- Results sent to buffer after n conversion
+                    // For example, if you are sampling 4 channels, you
+                    // should have _SMPI = 3;
+    _ALTS = 0;      // AD1CON2<0> -- Sample MUXA only
+
+    // AD1CON3 register -- Change _SAMC and _ADCS based on your
+    // selection of oscillator and postscaling
+    _ADRC = 0;      // AD1CON3<15> -- Use system clock
+    _SAMC = 1;      // AD1CON3<12:8> -- Auto sample every A/D period TAD
+    _ADCS = 0;      // AD1CON3<7:0> -- A/D period TAD = TCY
+    
+    // AD1CHS register
+    _CH0NA = 0;     // AD1CHS<7:5> -- Measure voltages relative to VSS
+    _CSS3 = 1;
+    _CSS4 = 1;
+    _CSS13 = 1;
+    
+    _ADON = 1;      // AD1CON1<15> -- Turn on A/D
+    
+}
+    
