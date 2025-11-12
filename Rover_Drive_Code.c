@@ -352,10 +352,10 @@ int main(void){
             }
             
             // check right wall
-            if (_RB14 == 0){
+            if (_RB14 == 1){
                 
                 // check left wall
-                if (_RB15 == 0){
+                if (_RB15 == 1){
                     
                     // no line middle
                     if (ADC1BUF13 > qrd_no){
@@ -412,10 +412,10 @@ int main(void){
         canyon_straight();
         
         // check wall forward wall
-        if (_RB13 == 0){
+        if (_RB13 == 1){
             
             // check right wall
-            if (_RB14 == 0){
+            if (_RB14 == 1){
                 
                 // change state to canyonright
                 state = canyonright;
@@ -423,7 +423,7 @@ int main(void){
             }
             
             // check left wall
-            else if (_RB15 == 0){
+            else if (_RB15 == 1){
                 
                 // change state to canyonleft
                 state = canyonleft;
@@ -471,3 +471,4 @@ int main(void){
 return 0;
 
 }
+
