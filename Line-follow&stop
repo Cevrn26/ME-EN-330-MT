@@ -1,0 +1,188 @@
+#include "xc.h"
+
+// select oscillator
+#pragma config FNOSC = LPFRC // 31 khz
+
+// turn of pin 8 clock
+#pragma config OSCIOFNC = OFF
+
+// turn of secondary oscillator
+#pragma config SOSCSRC = DIG
+
+// Sensor definitions for clarity
+#define QR ADC1BUF4      // Right QRD sensor
+#define QL ADC1BUF15     // Left QRD sensor
+#define QM ADC1BUF13     // Middle QRD sensor
+#define IR ADC1BUF12     // IR sensor on RB12
+
+// Thresholds
+#define QRD_THRESHOLD 500
+#define IR_THRESHOLD 500
+
+void stop_motors(void){
+    OC1RS = 0;
+    OC1R = 0;
+    OC2RS = 0;
+    OC2R = 0;
+}
+
+void line_straight(void){
+    // go straight
+    _LATA0 = 0;
+    _LATA1 = 0;
+        
+    // both motors equal
+    OC1RS = 500;
+    OC1R = 250;
+    OC2RS = 500;
+    OC2R = 250;
+}
+
+void line_left(void){
+    // turn left - slow down right motor
+    OC1RS = 500;
+    OC1R = 250;
+    OC2RS = 1000;
+    OC2R = 500;
+}
+
+void line_right(void){
+    // turn right - slow down left motor
+    OC1RS = 1000;
+    OC1R = 500;
+    OC2RS = 500;
+    OC2R = 250;
+}
+
+void config_ad(void){
+    _ADON = 0;          // Turn off A/D during config
+    
+    // Clear all A/D registers
+    AD1CON1 = 0; 
+    AD1CON2 = 0; 
+    AD1CON3 = 0; 
+    AD1CON5 = 0; 
+    AD1CSSL = 0; 
+    AD1CSSH = 0; 
+    
+    // AD1CON1 register
+    _ADSIDL = 0;    // A/D continues while in idle mode
+    _MODE12 = 1;    // 12-bit A/D operation
+    _FORM = 0;      // Unsigned integer output
+    _SSRC = 7;      // Auto conversion (internal counter)
+    _ASAM = 1;      // Auto sampling
+
+    // AD1CON2 register
+    _PVCFG = 0;     // Use VDD as positive ref voltage
+    _NVCFG = 0;     // Use VSS as negative ref voltage
+    _BUFREGEN = 1;  // Result appears in buffer location corresponding to channel
+    _CSCNA = 1;     // Scans inputs specified in AD1CSSx registers
+    _SMPI = 3;      // Interrupt after 4 conversions (sampling 4 channels)
+    _ALTS = 0;      // Sample MUXA only
+
+    // AD1CON3 register
+    _ADRC = 0;      // Use system clock
+    _SAMC = 1;      // Auto sample every A/D period TAD
+    _ADCS = 0;      // A/D period TAD = TCY
+    
+    // AD1CHS register
+    _CH0NA = 0;     // Measure voltages relative to VSS
+    
+    // Enable the 4 channels
+    _CSS4 = 1;      // AN4 - Right QRD
+    _CSS12 = 1;     // AN12 - IR sensor
+    _CSS13 = 1;     // AN13 - Middle QRD
+    _CSS15 = 1;     // AN15 - Left QRD
+    
+    _ADON = 1;      // Turn on A/D
+}
+
+int main(void){
+    // states
+    enum { STOP, LINE_STRAIGHT, LINE_LEFT, LINE_RIGHT } state;
+    
+    // configure peripherals
+    config_ad();
+    _ANSA0 = 0;
+    _ANSA1 = 0;
+    
+    // configure output or input
+    _TRISA0 = 0;  // pin 2 (right motor direction pin)
+    _TRISA1 = 0;  // pin 3 (left motor direction pin)
+                  // pin 4 (left motor OC2)
+    _TRISB12 = 1; // pin 23 (IR sensor AN12)
+    _TRISB2 = 1;  // pin 6 (right QRD a/d pin AN4)
+    _TRISA2 = 1;  // pin 7 (middle QRD a/d pin AN13)
+    _TRISB4 = 1;  // pin 9 (left QRD a/d pin AN15)
+                  // pin 14 (right motor OC1)
+    
+    // configure PWM
+    OC1CON1 = 0x1C06;
+    OC1CON2 = 0x001F;
+    OC2CON1 = 0x1C06;
+    OC2CON2 = 0x001F;
+    
+    // set initial state
+    state = STOP;
+    
+    // main control loop
+    while(1){
+        
+        // PRIORITY: Check IR sensor in ALL states - stop immediately if triggered
+        if (IR < IR_THRESHOLD){
+            state = STOP;
+            stop_motors();
+            continue; // Skip rest of loop and restart
+        }
+        
+        switch(state){
+            
+            case STOP:
+                stop_motors();
+                
+                // Start condition: middle QRD detects line AND IR is above threshold
+                if ((QM < QRD_THRESHOLD) && (IR > IR_THRESHOLD)){
+                    state = LINE_STRAIGHT;
+                }
+                break;
+            
+            case LINE_STRAIGHT:
+                line_straight();
+                
+                // Check for line deviation
+                if (QL < QRD_THRESHOLD){
+                    state = LINE_LEFT;
+                }
+                else if (QR < QRD_THRESHOLD){
+                    state = LINE_RIGHT;
+                }
+                break;
+            
+            case LINE_LEFT:
+                line_left();
+                
+                // Return to center when left sensor no longer sees line
+                if (QL > QRD_THRESHOLD){
+                    state = LINE_STRAIGHT;
+                }
+                break;
+            
+            case LINE_RIGHT:
+                line_right();
+                
+                // Return to center when right sensor no longer sees line
+                if (QR > QRD_THRESHOLD){
+                    state = LINE_STRAIGHT;
+                }
+                break;
+            
+            default:
+                // Safety: unknown state, stop motors
+                stop_motors();
+                state = STOP;
+                break;
+        }
+    }
+    
+    return 0;
+}
